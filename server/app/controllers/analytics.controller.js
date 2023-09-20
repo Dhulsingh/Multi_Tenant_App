@@ -9314,3 +9314,187 @@ exports.scc = async (req, res) => {
       })
   })
 }
+
+exports.carnes = async (req, res) => {
+  let token = req.headers['x-access-token']
+  const data = req.body
+  jwt.verify(token, process.env.secret, async (err, decoded) => {
+    let wh
+    if (decoded.id_branch != 0000) {
+      wh = {
+        id_branch: decoded.id_branch,
+        algo_id: 72
+      }
+    } else {
+      wh = {
+        id_account: decoded.id_account,
+        algo_id: 72
+      }
+    }
+    Relation.findOne({
+      where: wh
+    })
+      .then(async rel => {
+        await db
+          .con()
+          .query(
+            `SELECT * from carnes WHERE ${data.type} = '${req.params.id}' and time >= '${data.start}' and  time <= '${data.end}' order by time asc;`,
+            function (err, result) {
+              if (err)
+                return res.status(500).json({
+                  success: false,
+                  message: err
+                })
+              let days = Math.round(
+                (new Date(data.end) - new Date(data.start)) / (1000 * 60 * 60 * 24)
+              )
+              let ress = {}
+              let avg = 0
+              let cache = ''
+              let ressover = {}
+              result.forEach(function (v) {
+                if (cache == '') {
+                  cache =
+                    v.time.getFullYear() +
+                    '-' +
+                    (v.time.getMonth() + 1) +
+                    '-' +
+                    v.time.getDate() +
+                    ' ' +
+                    v.time.getHours()
+                }
+
+                if (
+                  cache !=
+                  v.time.getFullYear() +
+                    '-' +
+                    (v.time.getMonth() + 1) +
+                    '-' +
+                    v.time.getDate() +
+                    ' ' +
+                    v.time.getHours()
+                ) {
+                  while (
+                    cache !=
+                    v.time.getFullYear() +
+                      '-' +
+                      (v.time.getMonth() + 1) +
+                      '-' +
+                      v.time.getDate() +
+                      ' ' +
+                      v.time.getHours()
+                  ) {
+                    let t = new Date(cache + ':00:00').getTime()
+                    t += 60 * 60 * 1000
+                    cache = new Date(t)
+                    ressover[
+                      cache.getFullYear() +
+                        '-' +
+                        (cache.getMonth() + 1) +
+                        '-' +
+                        cache.getDate() +
+                        ' ' +
+                        cache.getHours()
+                    ] = 0
+                    cache =
+                      cache.getFullYear() +
+                      '-' +
+                      (cache.getMonth() + 1) +
+                      '-' +
+                      cache.getDate() +
+                      ' ' +
+                      cache.getHours()
+                  }
+                }
+                if (
+                  cache ==
+                  v.time.getFullYear() +
+                    '-' +
+                    (v.time.getMonth() + 1) +
+                    '-' +
+                    v.time.getDate() +
+                    ' ' +
+                    v.time.getHours()
+                ) {
+                  ressover[
+                    v.time.getFullYear() +
+                      '-' +
+                      (v.time.getMonth() + 1) +
+                      '-' +
+                      v.time.getDate() +
+                      ' ' +
+                      v.time.getHours()
+                  ] =
+                    (ressover[
+                      v.time.getFullYear() +
+                        '-' +
+                        (v.time.getMonth() + 1) +
+                        '-' +
+                        v.time.getDate() +
+                        ' ' +
+                        v.time.getHours()
+                    ] || 0) + 1
+                }
+                ress[v.zone] = (ress[v.zone] || 0) + 1
+                avg = avg + v.dwell
+                let d = v.time
+                let se = d.getSeconds()
+                let mi = d.getMinutes()
+                let ho = d.getHours()
+                if (se < 10) {
+                  se = '0' + se
+                }
+                if (mi < 10) {
+                  mi = '0' + mi
+                }
+                if (ho < 10) {
+                  ho = '0' + ho
+                }
+                d =
+                  d.getFullYear() +
+                  '-' +
+                  (d.getMonth() + 1) +
+                  '-' +
+                  d.getDate() +
+                  '_' +
+                  ho +
+                  ':' +
+                  mi +
+                  ':' +
+                  se
+                v['picture'] = `${d}_${v.track_id}_zone${v.zone}.jpg`
+                v.pic_path = `${process.env.my_ip}:${process.env.PORTNODE}/api/pictures/${decoded.id_account}/${decoded.id_branch}/carnes/${req.params.id}/${v.picture}`
+                v.movie = `${d}_${v.track_id}_video.mp4`
+                v.vid = `${process.env.my_ip}:${process.env.PORTNODE}/api/pictures/${decoded.id_account}/${decoded.id_branch}/carnes/${req.params.id}/${v.movie}`
+              })
+              let lo = []
+              for (var l of Object.keys(ress)) {
+                lo.push({
+                  name: l,
+                  value: ress[l],
+                  perc: JSON.stringify(Math.round((ress[l] / result.length) * 100)) + '%'
+                })
+              }
+              let av = result.length / (24 * days)
+              let a = {
+                total: result.length,
+                avgH: Math.round(av * 100) / 100,
+                raw: result,
+                donut: lo,
+                over: ressover
+              }
+              res.status(200).json({
+                success: true,
+                data: a
+              })
+            }
+          )
+      })
+      .catch(err => {
+        return res.status(500).send({
+          success: false,
+          message: err
+        })
+      })
+  })
+}

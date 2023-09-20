@@ -23,6 +23,10 @@ export class AnalyticsService {
     return this.http.post(`${this.API_URL}17/${id}`, dates);
   }
 
+  carnes(id: string, dates){
+    return this.http.post(`${this.API_URL}72/${id}`, dates);
+  }
+
   aod(id: string, dates){
     return this.http.post(`${this.API_URL}16/${id}`, dates);
   }
